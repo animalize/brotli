@@ -18,6 +18,13 @@ static PyObject *BrotliError;
 /* -----------------------------------
      BlocksOutputBuffer code
    ----------------------------------- */
+// Compatibility with Visual Studio 2013 and older which don't support
+// the inline keyword in C (only in C++): use __inline instead.
+#if (defined(_MSC_VER) && _MSC_VER < 1900 \
+     && !defined(__cplusplus) && !defined(inline))
+  #define inline __inline
+#endif
+
 typedef struct {
     /* List of blocks */
     PyObject *list;
@@ -216,12 +223,13 @@ static int as_bounded_int(PyObject *o, int* result, int lower_bound, int upper_b
 }
 
 static int mode_convertor(PyObject *o, BrotliEncoderMode *mode) {
+  int mode_value = -1;
+
   if (!PyInt_Check(o)) {
     PyErr_SetString(BrotliError, "Invalid mode");
     return 0;
   }
 
-  int mode_value = -1;
   if (!as_bounded_int(o, &mode_value, 0, 255)) {
     PyErr_SetString(BrotliError, "Invalid mode");
     return 0;
@@ -288,9 +296,10 @@ static PyObject* compress_stream(BrotliEncoderState* enc, BrotliEncoderOperation
 
   size_t available_out;
   uint8_t* next_out;
-  BlocksOutputBuffer buffer = {.list=NULL};
+  BlocksOutputBuffer buffer;
   PyObject *ret;
 
+  buffer.list = NULL;
   if (BlocksOutputBuffer_InitAndGrow(&buffer, &available_out, &next_out) < 0) {
     goto error;
   }
@@ -601,9 +610,10 @@ static PyObject* decompress_stream(BrotliDecoderState* dec,
 
   size_t available_out;
   uint8_t* next_out;
-  BlocksOutputBuffer buffer = {.list=NULL};
+  BlocksOutputBuffer buffer;
   PyObject *ret;
 
+  buffer.list = NULL;
   if (BlocksOutputBuffer_InitAndGrow(&buffer, &available_out, &next_out) < 0) {
     goto error;
   }
@@ -853,7 +863,7 @@ static PyObject* brotli_decompress(PyObject *self, PyObject *args, PyObject *key
 
   uint8_t* next_out;
   size_t available_out;
-  BlocksOutputBuffer buffer = {.list=NULL};
+  BlocksOutputBuffer buffer;
   PyObject *ret;
 
   static const char *kwlist[] = {"string", NULL};
@@ -877,6 +887,7 @@ static PyObject* brotli_decompress(PyObject *self, PyObject *args, PyObject *key
   next_in = (uint8_t*) input.buf;
   available_in = input.len;
 
+  buffer.list = NULL;
   if (BlocksOutputBuffer_InitAndGrow(&buffer, &available_out, &next_out) < 0) {
     goto error;
   }
@@ -952,6 +963,7 @@ static struct PyModuleDef brotli_module = {
 
 PyMODINIT_FUNC INIT_BROTLI(void) {
   PyObject *m = CREATE_BROTLI;
+  char version[16];
 
   BrotliError = PyErr_NewException((char*) "brotli.error", NULL, NULL);
   if (BrotliError != NULL) {
@@ -975,7 +987,6 @@ PyMODINIT_FUNC INIT_BROTLI(void) {
   PyModule_AddIntConstant(m, "MODE_TEXT", (int) BROTLI_MODE_TEXT);
   PyModule_AddIntConstant(m, "MODE_FONT", (int) BROTLI_MODE_FONT);
 
-  char version[16];
   snprintf(version, sizeof(version), "%d.%d.%d",
       BROTLI_VERSION >> 24, (BROTLI_VERSION >> 12) & 0xFFF, BROTLI_VERSION & 0xFFF);
   PyModule_AddStringConstant(m, "__version__", version);
